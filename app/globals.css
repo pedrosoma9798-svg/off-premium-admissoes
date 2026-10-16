@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-marca-papel text-marca-grafite antialiased;
+    font-feature-settings: 'tnum' 1; /* números tabulares: datas alinhadas */
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-marca-grafite/40 ring-offset-2 ring-offset-marca-papel;
+  }
+}
