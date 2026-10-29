@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: 'OFF Premium — Controle de Admissões',
   description: 'Acompanhamento das admissões das lojas OFF Premium',
   robots: { index: false, follow: false }, // app interno
+  // Faz o iPhone abrir em tela cheia quando adicionado à tela de início
+  appleWebApp: {
+    capable: true,
+    title: 'Admissões',
+    statusBarStyle: 'black-translucent',
+  },
 }
 
 export const viewport: Viewport = {
