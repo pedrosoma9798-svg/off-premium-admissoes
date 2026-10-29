@@ -1,24 +1,29 @@
 import Link from 'next/link'
-import { FiltrosAdmissoes } from '@/components/FiltrosAdmissoes'
-import { ListaAdmissoes } from '@/components/ListaAdmissoes'
+import { AdmissoesFiltraveis } from '@/components/AdmissoesFiltraveis'
 import { TituloPagina } from '@/components/TituloPagina'
 import { exigirAdminPagina } from '@/lib/auth'
-import { listarAdmissoes, listarLojas, type FiltrosLista } from '@/lib/consultas'
+import { listarAdmissoes, listarLojas } from '@/lib/consultas'
 
 const STATUS_ATIVOS = ['Pendente', 'Data confirmada', 'Desistente'] as const
 
-export default async function AdmissoesAtivas({ searchParams }: { searchParams: FiltrosLista }) {
-  await exigirAdminPagina()
-  const [admissoes, lojas] = await Promise.all([listarAdmissoes('ativas', searchParams), listarLojas()])
-
-  const filtrando = Object.values(searchParams).some(Boolean)
-  const total = admissoes.length
+export default async function AdmissoesAtivas({
+  searchParams,
+}: {
+  searchParams: { q?: string; loja?: string; cargo?: string; status?: string }
+}) {
+  // Permissão e dados em paralelo, não em fila: economiza uma ida ao
+  // banco por carregamento. O RLS protege as consultas de qualquer forma,
+  // e exigirAdminPagina redireciona quem não for admin.
+  const [, admissoes, lojas] = await Promise.all([
+    exigirAdminPagina(),
+    listarAdmissoes('ativas'),
+    listarLojas(),
+  ])
 
   return (
     <>
       <TituloPagina
         titulo="Admissões ativas"
-        descricao={`${total} ${total === 1 ? 'admissão' : 'admissões'}${filtrando ? ' com estes filtros' : ''}`}
         acao={
           <Link
             href="/admin/nova"
@@ -28,26 +33,11 @@ export default async function AdmissoesAtivas({ searchParams }: { searchParams: 
           </Link>
         }
       />
-
-      <div className="mb-6">
-        <FiltrosAdmissoes lojas={lojas.map((l) => l.nome)} status={STATUS_ATIVOS} />
-      </div>
-
-      <ListaAdmissoes
+      <AdmissoesFiltraveis
         admissoes={admissoes}
-        vazio={
-          filtrando ? (
-            'Nenhuma admissão encontrada com esses filtros.'
-          ) : (
-            <>
-              Nenhuma admissão ativa.{' '}
-              <Link href="/admin/nova" className="font-medium text-marca-grafite underline underline-offset-4">
-                Cadastre a primeira
-              </Link>
-              .
-            </>
-          )
-        }
+        lojas={lojas.map((l) => l.nome)}
+        status={STATUS_ATIVOS}
+        filtrosIniciais={searchParams}
       />
     </>
   )

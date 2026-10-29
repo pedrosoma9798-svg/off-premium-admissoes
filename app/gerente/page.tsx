@@ -5,7 +5,8 @@ import { agoraFormatado, diaDaSemana, formatarDiaMes, hojeISO } from '@/lib/data
 import { criarClienteServidor } from '@/lib/supabase/server'
 import type { Admissao } from '@/lib/types'
 
-// "Hoje"/"amanhã" no lugar do dia da semana, quando for o caso.
+type AdmissaoPainel = Pick<Admissao, 'id' | 'nome' | 'cargo' | 'loja' | 'data_inicio' | 'status'>
+
 function rotuloDia(iso: string, hoje: string, amanha: string) {
   if (iso === hoje) return 'hoje'
   if (iso === amanha) return 'amanhã'
@@ -20,7 +21,21 @@ function somarUmDia(iso: string) {
 const lojaCurta = (loja: string) => loja.replace(/^OFF PREMIUM - /, '')
 
 export default async function PainelGerente({ searchParams }: { searchParams: { loja?: string } }) {
-  const perfil = await obterPerfil()
+  const supabase = criarClienteServidor()
+
+  // Perfil e admissões em paralelo, não em fila. A consulta não precisa
+  // esperar para saber quais lojas filtrar: o RLS já devolve apenas as
+  // lojas vinculadas a quem está logado. A escolha do seletor é aplicada
+  // depois, em memória.
+  const [perfil, { data }] = await Promise.all([
+    obterPerfil(),
+    supabase
+      .from('admissoes')
+      .select('id, nome, cargo, loja, data_inicio, status')
+      .neq('status', 'Iniciado')
+      .order('nome'),
+  ])
+
   if (!perfil) redirect('/auth/sem-perfil')
 
   const minhasLojas = [...perfil.lojas].sort()
@@ -34,7 +49,6 @@ export default async function PainelGerente({ searchParams }: { searchParams: { 
     )
   }
 
-  // Seletor aparece para supervisor ou para quem tem mais de uma loja.
   const temSeletor = perfil.role === 'supervisor' || minhasLojas.length > 1
   const pedida = searchParams.loja
   const selecao = !temSeletor
@@ -42,20 +56,11 @@ export default async function PainelGerente({ searchParams }: { searchParams: { 
     : pedida && (pedida === TODAS || minhasLojas.includes(pedida))
       ? pedida
       : TODAS
-  const lojasConsultadas = selecao === TODAS ? minhasLojas : [selecao]
   const visaoGeral = selecao === TODAS && minhasLojas.length > 1
 
-  // Uma consulta só. O RLS já limita às lojas do perfil; o filtro
-  // abaixo escolhe entre elas. "Iniciado" nunca aparece aqui.
-  const supabase = criarClienteServidor()
-  const { data } = await supabase
-    .from('admissoes')
-    .select('id, nome, cargo, loja, data_inicio, status')
-    .in('loja', lojasConsultadas)
-    .neq('status', 'Iniciado')
-    .order('nome')
+  const todas = (data ?? []) as AdmissaoPainel[]
+  const admissoes = selecao === TODAS ? todas : todas.filter((a) => a.loja === selecao)
 
-  const admissoes = (data ?? []) as Pick<Admissao, 'id' | 'nome' | 'cargo' | 'loja' | 'data_inicio' | 'status'>[]
   const hoje = hojeISO()
   const amanha = somarUmDia(hoje)
 
@@ -65,7 +70,7 @@ export default async function PainelGerente({ searchParams }: { searchParams: { 
   const aguardando = admissoes.filter((a) => a.status === 'Pendente')
   const desistencias = admissoes.filter((a) => a.status === 'Desistente')
 
-  const titulo = visaoGeral ? 'Todas as lojas' : lojasConsultadas[0]
+  const titulo = visaoGeral ? 'Todas as lojas' : selecao === TODAS ? minhasLojas[0] : selecao
 
   return (
     <div className="space-y-4">
@@ -77,10 +82,13 @@ export default async function PainelGerente({ searchParams }: { searchParams: { 
           <h1 className="mt-0.5 text-lg font-semibold leading-snug">{titulo}</h1>
         </header>
 
-        {/* 🟢 PRÓXIMOS INÍCIOS */}
+        {/* PRÓXIMOS INÍCIOS */}
         <section className="px-5 py-5" aria-labelledby="bloco-proximos">
-          <h2 id="bloco-proximos" className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-800">
-            <span aria-hidden>🟢</span> PRÓXIMOS INÍCIOS
+          <h2
+            id="bloco-proximos"
+            className="flex items-center gap-2 text-sm font-semibold tracking-wide text-emerald-800"
+          >
+            <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> PRÓXIMOS INÍCIOS
           </h2>
           {proximos.length === 0 ? (
             <p className="mt-3 text-stone-500">Nenhum início confirmado por enquanto.</p>
@@ -113,10 +121,13 @@ export default async function PainelGerente({ searchParams }: { searchParams: { 
           )}
         </section>
 
-        {/* 🟡 AGUARDANDO DATA DE INÍCIO */}
+        {/* AGUARDANDO DATA DE INÍCIO */}
         <section className="border-t border-stone-100 px-5 py-5" aria-labelledby="bloco-aguardando">
-          <h2 id="bloco-aguardando" className="flex items-center gap-2 text-sm font-semibold tracking-wide text-amber-800">
-            <span aria-hidden>🟡</span> AGUARDANDO DATA DE INÍCIO
+          <h2
+            id="bloco-aguardando"
+            className="flex items-center gap-2 text-sm font-semibold tracking-wide text-amber-800"
+          >
+            <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-amber-400" /> AGUARDANDO DATA DE INÍCIO
           </h2>
           <p className="mt-2 text-stone-700">
             <span className="text-2xl font-semibold">{aguardando.length}</span>{' '}
@@ -134,10 +145,13 @@ export default async function PainelGerente({ searchParams }: { searchParams: { 
           )}
         </section>
 
-        {/* 🔴 DESISTÊNCIAS */}
+        {/* DESISTÊNCIAS */}
         <section className="border-t border-stone-100 px-5 py-5" aria-labelledby="bloco-desistencias">
-          <h2 id="bloco-desistencias" className="flex items-center gap-2 text-sm font-semibold tracking-wide text-red-800">
-            <span aria-hidden>🔴</span> DESISTÊNCIAS
+          <h2
+            id="bloco-desistencias"
+            className="flex items-center gap-2 text-sm font-semibold tracking-wide text-red-800"
+          >
+            <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-red-500" /> DESISTÊNCIAS
           </h2>
           <p className="mt-2 text-2xl font-semibold text-stone-700">{desistencias.length}</p>
           {desistencias.length > 0 && (

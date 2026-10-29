@@ -1,55 +1,44 @@
 'use client'
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useTransition } from 'react'
 import { CARGOS } from '@/lib/constants'
 import { classeCampo } from './campos'
 
-interface Props {
-  lojas: string[]
-  status: readonly string[] // status disponíveis no filtro desta página
+export interface Filtros {
+  q: string
+  loja: string
+  cargo: string
+  status: string
 }
 
-// Filtros guardados na URL (?q=&loja=&cargo=&status=): o link pode
-// ser compartilhado e a página continua funcionando ao recarregar.
-export function FiltrosAdmissoes({ lojas, status }: Props) {
-  const router = useRouter()
-  const caminho = usePathname()
-  const params = useSearchParams()
-  const [pendente, iniciar] = useTransition()
-  const [busca, setBusca] = useState(params.get('q') ?? '')
+export const FILTROS_VAZIOS: Filtros = { q: '', loja: '', cargo: '', status: '' }
 
-  function aplicar(chave: string, valor: string) {
-    const novos = new URLSearchParams(params.toString())
-    if (valor) novos.set(chave, valor)
-    else novos.delete(chave)
-    iniciar(() => router.replace(`${caminho}?${novos.toString()}`))
-  }
+interface Props {
+  lojas: string[]
+  status: readonly string[]
+  valores: Filtros
+  aoMudar: (f: Filtros) => void
+}
 
-  // Busca por nome com pequena espera para não consultar a cada tecla.
-  useEffect(() => {
-    if (busca === (params.get('q') ?? '')) return
-    const t = setTimeout(() => aplicar('q', busca.trim()), 350)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca])
-
-  const temFiltro = ['q', 'loja', 'cargo', 'status'].some((k) => params.get(k))
+// Controles de filtro. Não fazem nenhuma chamada de rede: só avisam
+// o componente pai, que filtra a lista que já está na memória.
+export function FiltrosAdmissoes({ lojas, status, valores, aoMudar }: Props) {
+  const set = (chave: keyof Filtros, valor: string) => aoMudar({ ...valores, [chave]: valor })
+  const temFiltro = Object.values(valores).some(Boolean)
 
   return (
-    <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr] ${pendente ? 'opacity-70' : ''}`}>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr]">
       <input
         type="search"
         placeholder="Buscar por nome"
         aria-label="Buscar por nome"
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
+        value={valores.q}
+        onChange={(e) => set('q', e.target.value)}
         className={classeCampo}
       />
       <select
         aria-label="Filtrar por loja"
-        value={params.get('loja') ?? ''}
-        onChange={(e) => aplicar('loja', e.target.value)}
+        value={valores.loja}
+        onChange={(e) => set('loja', e.target.value)}
         className={classeCampo}
       >
         <option value="">Todas as lojas</option>
@@ -61,8 +50,8 @@ export function FiltrosAdmissoes({ lojas, status }: Props) {
       </select>
       <select
         aria-label="Filtrar por cargo"
-        value={params.get('cargo') ?? ''}
-        onChange={(e) => aplicar('cargo', e.target.value)}
+        value={valores.cargo}
+        onChange={(e) => set('cargo', e.target.value)}
         className={classeCampo}
       >
         <option value="">Todos os cargos</option>
@@ -75,8 +64,8 @@ export function FiltrosAdmissoes({ lojas, status }: Props) {
       {status.length > 1 ? (
         <select
           aria-label="Filtrar por status"
-          value={params.get('status') ?? ''}
-          onChange={(e) => aplicar('status', e.target.value)}
+          value={valores.status}
+          onChange={(e) => set('status', e.target.value)}
           className={classeCampo}
         >
           <option value="">Todos os status</option>
@@ -92,10 +81,7 @@ export function FiltrosAdmissoes({ lojas, status }: Props) {
       {temFiltro && (
         <button
           type="button"
-          onClick={() => {
-            setBusca('')
-            iniciar(() => router.replace(caminho))
-          }}
+          onClick={() => aoMudar(FILTROS_VAZIOS)}
           className="justify-self-start text-sm text-stone-600 underline underline-offset-4 hover:text-marca-grafite"
         >
           Limpar filtros
