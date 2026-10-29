@@ -326,4 +326,39 @@ create policy "lojas: admin exclui"
 -- select id, email, 'Seu Nome', 'admin', '{}'
 -- from auth.users
 -- where email = 'seu.email@empresa.com.br';
+
+-- ───────────────────────────────────────────────────────────────
+-- 7. PERMISSÕES DE TABELA (GRANTS)
+--
+-- O RLS decide QUAIS LINHAS cada um vê. Estes GRANTs decidem se o
+-- papel pode tocar na tabela. Sem eles, nem o admin consegue ler o
+-- próprio perfil: o Postgres responde "permission denied" antes de
+-- o RLS sequer ser consultado.
+--
+-- anon (visitante sem login) não recebe nada: todo acesso exige
+-- sessão. TRUNCATE é revogado de todos porque ele IGNORA o RLS.
+-- ───────────────────────────────────────────────────────────────
+
+grant usage on schema public to authenticated, service_role;
+
+-- Usuários logados: o RLS filtra as linhas.
+grant select, insert, update, delete on all tables in schema public to authenticated;
+
+-- service_role: usado só no servidor, para criar e editar contas.
+grant select, insert, update, delete on all tables in schema public to service_role;
+
+-- Ninguém precisa destes, e TRUNCATE contorna o RLS.
+revoke truncate, references, trigger on all tables in schema public
+  from anon, authenticated, service_role;
+
+-- Visitante sem login não acessa nada.
+revoke all on all tables in schema public from anon;
+revoke usage on schema public from anon;
+
+-- Mesmas regras para tabelas criadas no futuro.
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated, service_role;
+alter default privileges in schema public
+  revoke truncate, references, trigger on tables from anon, authenticated, service_role;
+alter default privileges in schema public revoke all on tables from anon;
 -- ───────────────────────────────────────────────────────────────
